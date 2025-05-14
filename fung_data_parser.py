@@ -52,24 +52,37 @@ class ThreeDCTDataParser:
     """Parser for 3DCT correlation output files"""
     
     def __init__(self, base_path: str = "data"):
+        print(f"\nInitializing ThreeDCTDataParser with base path: {base_path}")
         self.base_path = Path(base_path)
     
     def load_session(self, txt_path: str, csv_path: Optional[str] = None) -> CorrelationSession:
         """Load a correlation session from TXT file (primary) and optional CSV"""
+        print(f"\n=== Loading Session ===")
+        print(f"TXT file: {txt_path}")
+        if csv_path:
+            print(f"CSV file: {csv_path}")
         
         # Parse the main correlation results from TXT
+        print("\nParsing correlation TXT file...")
         correlation_data = self.parse_correlation_txt(txt_path)
+        print("✓ TXT file parsed successfully")
         
         # Optionally load CSV coordinates (if provided)
         csv_coordinates = None
         if csv_path and os.path.exists(csv_path):
             try:
+                print("\nLoading CSV coordinates...")
                 csv_coordinates = self.parse_csv_coordinates(csv_path)
+                print(f"✓ CSV coordinates loaded: {len(csv_coordinates)} points")
             except Exception as e:
-                print(f"Warning: Could not parse CSV file {csv_path}: {e}")
+                print(f"✗ Error loading CSV file {csv_path}: {str(e)}")
+                print("Stack trace:")
+                import traceback
+                traceback.print_exc()
         
         # Create session ID from filename
         session_id = Path(txt_path).stem
+        print(f"\nCreating session with ID: {session_id}")
         
         return CorrelationSession(
             session_id=session_id,
@@ -85,57 +98,91 @@ class ThreeDCTDataParser:
     
     def parse_csv_coordinates(self, csv_path: str) -> np.ndarray:
         """Parse coordinates from CSV file (treat as preliminary/supplementary)"""
+        print(f"\nParsing CSV file: {csv_path}")
         try:
             # Try reading as CSV
+            print("Attempting to read as CSV...")
             df = pd.read_csv(csv_path, header=None)
             coords = df.iloc[:, :2].values  # Take first two columns as X, Y
+            print(f"✓ Successfully read CSV: {len(coords)} coordinates")
             return coords
         except:
             # Fallback: read as space/tab separated
             try:
+                print("CSV read failed, trying space/tab separated format...")
                 coords = np.loadtxt(csv_path, usecols=(0, 1))
+                print(f"✓ Successfully read space/tab separated: {len(coords)} coordinates")
                 return coords
             except:
                 # Last resort: try reading all columns and pick first 2
+                print("Space/tab separated read failed, trying raw data read...")
                 data = np.loadtxt(csv_path)
                 if data.ndim == 1:
                     # Single row
-                    return data[:2].reshape(1, 2)
-                return data[:, :2]
+                    coords = data[:2].reshape(1, 2)
+                else:
+                    coords = data[:, :2]
+                print(f"✓ Successfully read raw data: {len(coords)} coordinates")
+                return coords
     
     def parse_correlation_txt(self, txt_path: str) -> Dict:
         """Parse 3DCT correlation output text file - main ground truth source"""
-        with open(txt_path, 'r') as f:
-            content = f.read()
-        
-        # Extract metadata
-        machine_info = self._extract_machine_info(content)
-        date = self._extract_date(content)
-        
-        # Extract transformation parameters
-        transformation = self._parse_transformation_params(content)
-        
-        # Extract verified fiducial correspondences (PRIMARY GROUND TRUTH)
-        fiducial_pairs = self._parse_fiducial_pairs(content)
-        
-        # Extract POIs
-        pois = self._parse_pois(content)
-        
-        # Extract microscope center
-        microscope_center = self._parse_microscope_center(content)
-        
-        # Extract pixel size
-        pixel_size = self._parse_pixel_size(content)
-        
-        return {
-            'machine_info': machine_info,
-            'date': date,
-            'transformation': transformation,
-            'fiducial_pairs': fiducial_pairs,
-            'pois': pois,
-            'microscope_center': microscope_center,
-            'pixel_size_um': pixel_size
-        }
+        print(f"\nParsing correlation TXT file: {txt_path}")
+        try:
+            with open(txt_path, 'r') as f:
+                content = f.read()
+            print("✓ File read successfully")
+            
+            # Extract metadata
+            print("\nExtracting metadata...")
+            machine_info = self._extract_machine_info(content)
+            date = self._extract_date(content)
+            print(f"Machine info: {machine_info}")
+            print(f"Date: {date}")
+            
+            # Extract transformation parameters
+            print("\nExtracting transformation parameters...")
+            transformation = self._parse_transformation_params(content)
+            print(f"Rotation: {transformation.rotation_euler}")
+            print(f"Scale: {transformation.scale}")
+            print(f"RMS error: {transformation.rms_error}")
+            
+            # Extract verified fiducial correspondences
+            print("\nExtracting fiducial pairs...")
+            fiducial_pairs = self._parse_fiducial_pairs(content)
+            print(f"Found {len(fiducial_pairs)} fiducial pairs")
+            
+            # Extract POIs
+            print("\nExtracting points of interest...")
+            pois = self._parse_pois(content)
+            print(f"Found {len(pois)} points of interest")
+            
+            # Extract microscope center
+            print("\nExtracting microscope center...")
+            microscope_center = self._parse_microscope_center(content)
+            print(f"Microscope center: {microscope_center}")
+            
+            # Extract pixel size
+            print("\nExtracting pixel size...")
+            pixel_size = self._parse_pixel_size(content)
+            print(f"Pixel size: {pixel_size} um")
+            
+            return {
+                'machine_info': machine_info,
+                'date': date,
+                'transformation': transformation,
+                'fiducial_pairs': fiducial_pairs,
+                'pois': pois,
+                'microscope_center': microscope_center,
+                'pixel_size_um': pixel_size
+            }
+            
+        except Exception as e:
+            print(f"\n✗ Error parsing TXT file: {str(e)}")
+            print("Stack trace:")
+            import traceback
+            traceback.print_exc()
+            raise
     
     def _extract_machine_info(self, content: str) -> str:
         """Extract machine information"""
@@ -420,13 +467,20 @@ class ThreeDCTDataParser:
     
     def load_multiple_sessions(self, data_dir: str) -> List[CorrelationSession]:
         """Load all correlation sessions from a directory"""
+        print(f"\n=== Loading Multiple Sessions ===")
+        print(f"Data directory: {data_dir}")
+        
         data_path = Path(data_dir)
         sessions = []
         
         # Find all correlation txt files
+        print("\nSearching for correlation files...")
         txt_files = list(data_path.glob("*correlation*.txt"))
+        print(f"Found {len(txt_files)} correlation TXT files")
         
         for txt_file in txt_files:
+            print(f"\nProcessing file: {txt_file.name}")
+            
             # Look for corresponding CSV file
             base_name = txt_file.stem
             possible_csv_names = [
@@ -440,23 +494,31 @@ class ThreeDCTDataParser:
                 candidate = data_path / csv_name
                 if candidate.exists():
                     csv_file = str(candidate)
+                    print(f"Found matching CSV: {csv_name}")
                     break
             
             try:
                 session = self.load_session(str(txt_file), csv_file)
                 sessions.append(session)
-                print(f"✓ Loaded session: {session.session_id}")
+                print(f"✓ Successfully loaded session: {session.session_id}")
                 print(f"  - {len(session.fiducial_pairs)} fiducial pairs")
                 print(f"  - RMS error: {session.transformation.rms_error:.2f} pixels")
                 if csv_file:
                     print(f"  - CSV data: {len(session.csv_coordinates)} coordinates")
             except Exception as e:
-                print(f"✗ Error loading {txt_file.name}: {e}")
+                print(f"✗ Error loading {txt_file.name}: {str(e)}")
+                print("Stack trace:")
+                import traceback
+                traceback.print_exc()
         
+        print(f"\n=== Loading Complete ===")
+        print(f"Successfully loaded {len(sessions)} sessions")
         return sessions
     
     def validate_session_data(self, session: CorrelationSession) -> Dict[str, bool]:
         """Validate the parsed session data for consistency"""
+        print(f"\n=== Validating Session: {session.session_id} ===")
+        
         validation = {
             'has_fiducials': len(session.fiducial_pairs) > 0,
             'optimization_successful': session.transformation.optimization_successful,
@@ -466,9 +528,14 @@ class ThreeDCTDataParser:
             'coordinate_bounds_ok': True
         }
         
+        print("\nChecking fiducials...")
+        print(f"Has fiducials: {validation['has_fiducials']}")
+        print(f"Optimization successful: {validation['optimization_successful']}")
+        print(f"RMS error: {session.transformation.rms_error:.2f} (reasonable: {validation['reasonable_rms']})")
+        
         if validation['has_fiducials']:
-            # Check coordinate validity
-            for fid in session.fiducial_pairs:
+            print("\nValidating coordinates...")
+            for i, fid in enumerate(session.fiducial_pairs):
                 # Check 3D coordinates
                 if len(fid.initial_3d) == 3 and np.all(np.isfinite(fid.initial_3d)):
                     validation['has_3d_coords'] = True
@@ -481,6 +548,7 @@ class ThreeDCTDataParser:
                 if (np.any(fid.initial_3d < 0) or np.any(fid.initial_3d > 10000) or
                     np.any(fid.final_2d < 0) or np.any(fid.final_2d > 10000)):
                     validation['coordinate_bounds_ok'] = False
+                    print(f"✗ Fiducial {i} has out-of-bounds coordinates")
         
         validation['overall_valid'] = all([
             validation['has_fiducials'],
@@ -489,11 +557,18 @@ class ThreeDCTDataParser:
             validation['coordinate_bounds_ok']
         ])
         
+        print("\nValidation Results:")
+        for key, value in validation.items():
+            status = "✓" if value else "✗"
+            print(f"{status} {key}: {value}")
+        
         return validation
 
 
 # Usage example and testing
 if __name__ == "__main__":
+    print("\n=== Testing ThreeDCTDataParser ===")
+    
     # Initialize parser
     parser = ThreeDCTDataParser()
     
@@ -503,9 +578,10 @@ if __name__ == "__main__":
     
     try:
         # Load session
+        print("\nLoading test session...")
         session = parser.load_session(txt_path, csv_path)
         
-        print("=== Session Summary ===")
+        print("\n=== Session Summary ===")
         print(f"Session ID: {session.session_id}")
         print(f"Date: {session.date}")
         print(f"Number of verified fiducial pairs: {len(session.fiducial_pairs)}")
@@ -514,15 +590,12 @@ if __name__ == "__main__":
         print(f"Optimization successful: {session.transformation.optimization_successful}")
         
         # Validate session data
+        print("\nValidating session data...")
         validation = parser.validate_session_data(session)
-        print(f"\n=== Validation ===")
-        for key, value in validation.items():
-            status = "✓" if value else "✗"
-            print(f"{status} {key}: {value}")
         
         # Extract training pairs (main output)
+        print("\nExtracting training pairs...")
         training_pairs = parser.extract_training_pairs(session)
-        print(f"\n=== Training Data ===")
         print(f"Number of training pairs: {len(training_pairs)}")
         
         # Show first few examples
@@ -535,6 +608,7 @@ if __name__ == "__main__":
             print(f"    Error:           ({error[0]:.2f}, {error[1]:.2f}) pixels")
         
         # Get training data with metadata
+        print("\nExtracting training data with metadata...")
         training_data = parser.extract_training_data_with_metadata(session)
         print(f"\n=== Training Statistics ===")
         print(f"Average error magnitude: {np.mean(training_data['error_magnitudes']):.2f} pixels")
@@ -542,6 +616,7 @@ if __name__ == "__main__":
         print(f"Min error magnitude: {np.min(training_data['error_magnitudes']):.2f} pixels")
         
         # Get transformation matrix
+        print("\nComputing transformation matrix...")
         transform_matrix = parser.get_transformation_matrix_homogeneous(session)
         print(f"\n=== Transformation Matrix ===")
         print("4x4 Homogeneous transformation matrix:")
@@ -577,7 +652,8 @@ if __name__ == "__main__":
                     print(f"  TXT {i+1}: ({coord[0]:.1f}, {coord[1]:.1f})")
         
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"\n✗ Error during testing: {str(e)}")
+        print("Stack trace:")
         import traceback
         traceback.print_exc()
     
@@ -592,7 +668,10 @@ if __name__ == "__main__":
             rms_errors = [s.transformation.rms_error for s in sessions]
             n_fiducials = [len(s.fiducial_pairs) for s in sessions]
             
+            print(f"\n=== Session Statistics ===")
             print(f"RMS error range: {min(rms_errors):.2f} - {max(rms_errors):.2f} pixels")
             print(f"Fiducial count range: {min(n_fiducials)} - {max(n_fiducials)}")
     except Exception as e:
-        print(f"Error loading multiple sessions: {e}")
+        print(f"\n✗ Error loading multiple sessions: {str(e)}")
+        print("Stack trace:")
+        traceback.print_exc()
