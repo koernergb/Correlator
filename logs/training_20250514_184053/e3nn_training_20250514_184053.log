@@ -1,0 +1,2 @@
+2025-05-14 18:40:53,371 - INFO - Logging to logs/training_20250514_184053/e3nn_training_20250514_184053.log
+2025-05-14 18:40:53,533 - ERROR - Training failed: mat1 and mat2 shapes cannot be multiplied (32x3 and 4x144)

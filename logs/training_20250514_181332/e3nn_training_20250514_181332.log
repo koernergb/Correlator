@@ -1,0 +1,14 @@
+2025-05-14 18:13:32 - INFO - Logging to logs/training_20250514_181332/e3nn_training_20250514_181332.log
+2025-05-14 18:13:32 - INFO - ==================================================
+2025-05-14 18:13:32 - INFO - Starting E3NN Correlator Training
+2025-05-14 18:13:32 - INFO - ==================================================
+2025-05-14 18:13:32 - INFO - Training parameters:
+2025-05-14 18:13:32 - INFO -   Data directory: data/2023_embo_clem_material/3DCT/data
+2025-05-14 18:13:32 - INFO -   Synthetic ratio: 0.7
+2025-05-14 18:13:32 - INFO -   Number of synthetic sessions: 10
+2025-05-14 18:13:32 - INFO -   Number of epochs: 100
+2025-05-14 18:13:32 - INFO -   Learning rate: 0.001
+2025-05-14 18:13:32 - INFO -   Device: cpu
+2025-05-14 18:13:32 - INFO -   Log file: logs/training_20250514_181332/e3nn_training_20250514_181332.log
+2025-05-14 18:13:32 - INFO - ==================================================
+2025-05-14 18:13:32 - ERROR - Training failed: module 'e3nn.nn' has no attribute 'Linear'

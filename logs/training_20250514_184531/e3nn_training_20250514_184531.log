@@ -1,0 +1,2 @@
+2025-05-14 18:45:31,371 - INFO - Logging to logs/training_20250514_184531/e3nn_training_20250514_184531.log
+2025-05-14 18:45:31,503 - ERROR - Training failed: 'Irreps' object has no attribute 'from_cartesian'

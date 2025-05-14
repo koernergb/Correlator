@@ -1,0 +1,2 @@
+2025-05-14 18:33:46 - INFO - Logging to logs/training_20250514_183346/e3nn_training_20250514_183346.log
+2025-05-14 18:33:46 - ERROR - Training failed: 'E3NNFiducialCorrelator' object has no attribute 'mul'

@@ -1,16 +1,17 @@
-# src/synthetic_data/tdct_synthetic_generator.py
-import torch
+#!/usr/bin/env python3
 import numpy as np
-from dataclasses import dataclass
-from typing import List, Tuple, Optional, Dict
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-import sys
+import torch
 from pathlib import Path
+import sys
+import random
+from typing import List, Tuple, Dict, Optional
+import logging
+from datetime import datetime
+import traceback
+from dataclasses import dataclass
 
-# Add parent directory to path for imports
-sys.path.append(str(Path(__file__).parent.parent))
-from data_analysis.tdct_data_parser import (
+# Import directly from root directory
+from fung_data_parser import (
     TransformationParams, FiducialPair, POI, CorrelationSession,
     ThreeDCTDataParser
 )
@@ -190,54 +191,70 @@ class EmpiricalParameterExtractor:
         return (min(scales) - margin, max(scales) + margin)
     
     def _extract_translation_origin_ranges(self, sessions: List[CorrelationSession]) -> Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float]]:
-        """Extract translation_origin parameter ranges from real data"""
-        trans_origins = [session.transformation.translation_origin for session in sessions]
-        
-        if not trans_origins:
-            return ((2000, 2500), (200, 350), (-50, 50))
-        
-        trans_array = np.array(trans_origins)
-        
-        # Extract ranges with margin
-        margin = 0.1  # 10% margin
-        x_range = trans_array[:, 0].min(), trans_array[:, 0].max()
-        y_range = trans_array[:, 1].min(), trans_array[:, 1].max()
-        z_range = trans_array[:, 2].min(), trans_array[:, 2].max()
-        
-        x_margin = max(abs(x_range[1] - x_range[0]) * margin, 100)
-        y_margin = max(abs(y_range[1] - y_range[0]) * margin, 50)
-        z_margin = max(abs(z_range[1] - z_range[0]) * margin, 25)
-        
-        return (
-            (x_range[0] - x_margin, x_range[1] + x_margin),
-            (y_range[0] - y_margin, y_range[1] + y_margin),
-            (z_range[0] - z_margin, z_range[1] + z_margin)
-        )
+        """Extract translation origin ranges from real sessions"""
+        print("\nExtracting translation origin ranges...")
+        origins = []
+        for session in sessions:
+            origins.append(session.transformation.translation_origin)
+        if not origins:
+            print("No translation origins found, using default ranges")
+            return (
+                (-100.0, 100.0),  # X range
+                (-100.0, 100.0),  # Y range
+                (-50.0, 50.0)     # Z range
+            )
+        origins = np.array(origins)
+        ranges = []
+        for i in range(3):
+            min_val = float(np.min(origins[:, i]))
+            max_val = float(np.max(origins[:, i]))
+            if min_val == max_val:
+                min_val -= 1.0
+                max_val += 1.0
+            else:
+                margin = (max_val - min_val) * 0.1  # 10% margin
+                min_val -= margin
+                max_val += margin
+            if max_val - min_val < 1.0:
+                center = (min_val + max_val) / 2
+                min_val = center - 0.5
+                max_val = center + 0.5
+            ranges.append((min_val, max_val))
+        print(f"Translation origin ranges: {ranges}")
+        return tuple(ranges)
     
     def _extract_translation_center_ranges(self, sessions: List[CorrelationSession]) -> Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float]]:
-        """Extract translation_center parameter ranges from real data"""
-        trans_centers = [session.transformation.translation_center for session in sessions]
-        
-        if not trans_centers:
-            return ((500, 800), (100, 200), (200, 350))
-        
-        trans_array = np.array(trans_centers)
-        
-        # Extract ranges with margin
-        margin = 0.1  # 10% margin
-        x_range = trans_array[:, 0].min(), trans_array[:, 0].max()
-        y_range = trans_array[:, 1].min(), trans_array[:, 1].max()
-        z_range = trans_array[:, 2].min(), trans_array[:, 2].max()
-        
-        x_margin = max(abs(x_range[1] - x_range[0]) * margin, 50)
-        y_margin = max(abs(y_range[1] - y_range[0]) * margin, 25)
-        z_margin = max(abs(z_range[1] - z_range[0]) * margin, 25)
-        
-        return (
-            (x_range[0] - x_margin, x_range[1] + x_margin),
-            (y_range[0] - y_margin, y_range[1] + y_margin),
-            (z_range[0] - z_margin, z_range[1] + z_margin)
-        )
+        """Extract translation center ranges from real sessions"""
+        print("\nExtracting translation center ranges...")
+        centers = []
+        for session in sessions:
+            centers.append(session.transformation.translation_center)
+        if not centers:
+            print("No translation centers found, using default ranges")
+            return (
+                (-100.0, 100.0),  # X range
+                (-100.0, 100.0),  # Y range
+                (-50.0, 50.0)     # Z range
+            )
+        centers = np.array(centers)
+        ranges = []
+        for i in range(3):
+            min_val = float(np.min(centers[:, i]))
+            max_val = float(np.max(centers[:, i]))
+            if min_val == max_val:
+                min_val -= 1.0
+                max_val += 1.0
+            else:
+                margin = (max_val - min_val) * 0.1  # 10% margin
+                min_val -= margin
+                max_val += margin
+            if max_val - min_val < 1.0:
+                center = (min_val + max_val) / 2
+                min_val = center - 0.5
+                max_val = center + 0.5
+            ranges.append((min_val, max_val))
+        print(f"Translation center ranges: {ranges}")
+        return tuple(ranges)
     
     def _extract_center_point(self, sessions: List[CorrelationSession]) -> Tuple[float, float, float]:
         """Extract center point from real data (should be consistent)"""
@@ -283,16 +300,36 @@ class EmpiricalParameterExtractor:
         if not counts:
             return (8, 22)
         
-        return (min(counts), max(counts))
+        min_count = min(counts)
+        max_count = max(counts)
+        
+        # If we only have one session or all sessions have the same count,
+        # add some variation around the observed count
+        if min_count == max_count:
+            # Allow variation of ±20% around the observed count, but at least ±2
+            variation = max(2, int(min_count * 0.2))
+            return (max(4, min_count - variation), min_count + variation)
+        
+        return (min_count, max_count)
     
     def _extract_poi_count_range(self, sessions: List[CorrelationSession]) -> Tuple[int, int]:
         """Extract POI count range from real data"""
         counts = [len(session.pois) for session in sessions]
         
         if not counts:
-            return (2, 5)
+            return (1, 5)  # Default range if no data
         
-        return (max(1, min(counts)), max(counts))
+        min_count = min(counts)
+        max_count = max(counts)
+        
+        # If we only have one session or all sessions have the same count,
+        # add some variation around the observed count
+        if min_count == max_count:
+            # Allow variation of ±2 around the observed count
+            variation = 2
+            return (max(1, min_count - variation), min_count + variation)
+        
+        return (min_count, max_count)
     
     def _print_extracted_parameters(self, params: SyntheticParams):
         """Print extracted parameters for verification"""
@@ -324,8 +361,8 @@ class ThreeDCTSyntheticGenerator:
         print(f"\n=== Creating Generator from Real Data ===")
         print(f"Data directory: {data_dir}")
         
-        parser = ThreeDCTDataParser()
-        sessions = parser.load_multiple_sessions(data_dir)
+        parser = ThreeDCTDataParser(data_dir)
+        sessions = parser.load_multiple_sessions()
         
         if not sessions:
             print(f"✗ No correlation sessions found in {data_dir}")
@@ -338,12 +375,43 @@ class ThreeDCTSyntheticGenerator:
         
         return cls(params)
     
+    def _convert_to_e3nn_format(self, transform: TransformationParams) -> np.ndarray:
+        """Convert transformation parameters to E3NN format
+        
+        Args:
+            transform: Transformation parameters from 3DCT
+            
+        Returns:
+            Array of parameters in E3NN format:
+            - First 9 elements: flattened rotation matrix
+            - Next 1 element: scale
+            - Next 3 elements: translation
+            - Last 3 elements: center point
+        """
+        # Convert Euler angles to rotation matrix
+        phi, psi, theta = np.radians(transform.rotation_euler)
+        R = self._euler_to_rotation_matrix(phi, psi, theta)
+        
+        # Combine all parameters
+        params = np.concatenate([
+            R.flatten(),  # 9 parameters for rotation
+            [transform.scale],  # 1 parameter for scale
+            transform.translation_center,  # 3 parameters for translation
+            transform.center_point  # 3 parameters for center point
+        ])
+        
+        return params
+
     def generate_training_samples(
         self, 
         n_samples: int,
         seed: Optional[int] = None
-    ) -> List[Tuple[np.ndarray, np.ndarray]]:
-        """Generate training samples in the format expected by E3NN network"""
+    ) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        """Generate training samples in the format expected by E3NN network
+        
+        Returns:
+            List of tuples: (3D_coords, 2D_coords, transform_params)
+        """
         print(f"\n=== Generating {n_samples} Training Samples ===")
         if seed is not None:
             print(f"Using seed: {seed}")
@@ -354,9 +422,18 @@ class ThreeDCTSyntheticGenerator:
         for i in range(n_samples):
             print(f"\nGenerating sample {i+1}/{n_samples}")
             session = self.generate_correlation_session(seed=seed+i if seed else None)
-            training_pairs = ThreeDCTDataParser().extract_training_pairs(session)
-            training_samples.extend(training_pairs)
-            print(f"✓ Generated {len(training_pairs)} training pairs")
+            
+            # Get transformation parameters in E3NN format
+            transform_params = self._convert_to_e3nn_format(session.transformation)
+            
+            # Get fiducial pairs
+            for fid in session.fiducial_pairs:
+                training_samples.append((
+                    fid.initial_3d,  # 3D coordinates
+                    fid.final_2d,    # 2D coordinates
+                    transform_params  # Transformation parameters in E3NN format
+                ))
+            print(f"✓ Generated {len(session.fiducial_pairs)} training pairs")
         
         print(f"\n=== Training Sample Generation Complete ===")
         print(f"Total training pairs: {len(training_samples)}")
@@ -435,18 +512,43 @@ class ThreeDCTSyntheticGenerator:
         )
     
     def _generate_realistic_3d_positions(self, n_fiducials: int) -> np.ndarray:
-        """Generate realistic 3D fluorescence positions using empirical bounds"""
+        """Generate realistic 3D fluorescence positions with enhanced diversity"""
         positions = []
         
-        # Get empirical bounds
+        # Get empirical bounds with added variation
         x_bounds, y_bounds, z_bounds = self.params.fluorescence_bounds
         
+        # Add some noise to the bounds
+        x_bounds = (x_bounds[0] - 50, x_bounds[1] + 50)
+        y_bounds = (y_bounds[0] - 50, y_bounds[1] + 50)
+        z_bounds = (z_bounds[0] - 5, z_bounds[1] + 5)
+        
+        # Generate positions with more spatial diversity
         for _ in range(n_fiducials):
             for attempt in range(self.params.max_placement_attempts):
-                # Generate candidate position within empirical bounds
-                x = self.rng.uniform(*x_bounds)
-                y = self.rng.uniform(*y_bounds)
-                z = self.rng.uniform(*z_bounds)
+                # Generate candidate position with some clustering
+                if np.random.random() < 0.7:  # 70% chance of normal distribution
+                    x = np.random.normal(
+                        (x_bounds[0] + x_bounds[1])/2,
+                        (x_bounds[1] - x_bounds[0])/4
+                    )
+                    y = np.random.normal(
+                        (y_bounds[0] + y_bounds[1])/2,
+                        (y_bounds[1] - y_bounds[0])/4
+                    )
+                    z = np.random.normal(
+                        (z_bounds[0] + z_bounds[1])/2,
+                        (z_bounds[1] - z_bounds[0])/4
+                    )
+                else:  # 30% chance of uniform distribution
+                    x = np.random.uniform(*x_bounds)
+                    y = np.random.uniform(*y_bounds)
+                    z = np.random.uniform(*z_bounds)
+                
+                # Ensure within bounds
+                x = np.clip(x, x_bounds[0], x_bounds[1])
+                y = np.clip(y, y_bounds[0], y_bounds[1])
+                z = np.clip(z, z_bounds[0], z_bounds[1])
                 
                 candidate = np.array([x, y, z])
                 
@@ -475,38 +577,35 @@ class ThreeDCTSyntheticGenerator:
         return np.all(distances >= self.params.min_fiducial_distance)
     
     def _generate_transformation_parameters(self) -> TransformationParams:
-        """Generate realistic transformation parameters using empirical ranges"""
+        """Generate realistic transformation parameters with enhanced geometric constraints"""
+        # Base parameters from real data
+        base_rotation = np.array([92.488, -1.326, 26.773])
+        base_scale = 1.018
+        base_trans_origin = np.array([2340.836, 270.927, 0.000])
+        base_trans_center = np.array([636.061, 142.390, 272.407])
+        base_center = np.array([828.00, 828.00, 828.00])
         
-        # Generate rotation angles using empirical ranges
-        phi = self.rng.uniform(*self.params.rotation_ranges[0])
-        psi = self.rng.uniform(*self.params.rotation_ranges[1])
-        theta = self.rng.uniform(*self.params.rotation_ranges[2])
-        rotation_euler = np.array([phi, psi, theta])
+        # Add small variations while maintaining geometric relationships
+        rotation = base_rotation + np.random.normal(0, 2.0, 3)  # Small rotation variations
+        scale = base_scale + np.random.normal(0, 0.005)  # Small scale variations
         
-        # Generate scale using empirical range
-        scale = self.rng.uniform(*self.params.scale_range)
+        # Translation variations that maintain the geometric relationship
+        trans_origin = base_trans_origin + np.random.normal(0, 10.0, 3)
+        trans_center = base_trans_center + np.random.normal(0, 5.0, 3)
         
-        # Generate translations using empirical ranges
-        trans_origin_x = self.rng.uniform(*self.params.translation_origin_ranges[0])
-        trans_origin_y = self.rng.uniform(*self.params.translation_origin_ranges[1])
-        trans_origin_z = self.rng.uniform(*self.params.translation_origin_ranges[2])
-        translation_origin = np.array([trans_origin_x, trans_origin_y, trans_origin_z])
+        # Center point should be very close to the base center
+        center_point = base_center + np.random.normal(0, 1.0, 3)
         
-        trans_center_x = self.rng.uniform(*self.params.translation_center_ranges[0])
-        trans_center_y = self.rng.uniform(*self.params.translation_center_ranges[1])
-        trans_center_z = self.rng.uniform(*self.params.translation_center_ranges[2])
-        translation_center = np.array([trans_center_x, trans_center_y, trans_center_z])
-        
-        # Use empirical center point
-        center_point = np.array(self.params.center_point)
+        # Generate realistic RMS error
+        rms_error = np.random.uniform(0.5, 1.5)  # Typical range from real data
         
         return TransformationParams(
-            rotation_euler=rotation_euler,
+            rotation_euler=rotation,
             scale=scale,
-            translation_origin=translation_origin,
-            translation_center=translation_center,
+            translation_origin=trans_origin,
+            translation_center=trans_center,
             center_point=center_point,
-            rms_error=0.0,  # Will be calculated later
+            rms_error=rms_error,
             optimization_successful=True
         )
     
@@ -680,8 +779,12 @@ class ThreeDCTSyntheticGenerator:
         real_sessions: List[CorrelationSession],
         synthetic_ratio: float = 0.7,
         seed: Optional[int] = None
-    ) -> List[Tuple[np.ndarray, np.ndarray]]:
-        """Create a mixed dataset of synthetic and real data"""
+    ) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        """Create a mixed dataset of synthetic and real data
+        
+        Returns:
+            List of tuples: (3D_coords, 2D_coords, transform_params)
+        """
         print(f"\n=== Creating Mixed Dataset ===")
         print(f"Number of synthetic sessions: {n_synthetic_sessions}")
         print(f"Number of real sessions: {len(real_sessions)}")
@@ -697,19 +800,28 @@ class ThreeDCTSyntheticGenerator:
         for i in range(n_synthetic_sessions):
             print(f"\nGenerating synthetic session {i+1}/{n_synthetic_sessions}")
             session = self.generate_correlation_session(seed=seed+i if seed else None)
-            pairs = ThreeDCTDataParser().extract_training_pairs(session)
-            synthetic_samples.extend(pairs)
-            print(f"✓ Generated {len(pairs)} pairs")
+            transform_params = self._convert_to_e3nn_format(session.transformation)
+            for fid in session.fiducial_pairs:
+                synthetic_samples.append((
+                    fid.initial_3d,
+                    fid.final_2d,
+                    transform_params
+                ))
+            print(f"✓ Generated {len(session.fiducial_pairs)} pairs")
         
         # Extract real data
         print("\nExtracting real data...")
         real_samples = []
-        parser = ThreeDCTDataParser()
         for i, session in enumerate(real_sessions):
             print(f"\nProcessing real session {i+1}/{len(real_sessions)}")
-            pairs = parser.extract_training_pairs(session)
-            real_samples.extend(pairs)
-            print(f"✓ Extracted {len(pairs)} pairs")
+            transform_params = self._convert_to_e3nn_format(session.transformation)
+            for fid in session.fiducial_pairs:
+                real_samples.append((
+                    fid.initial_3d,
+                    fid.final_2d,
+                    transform_params
+                ))
+            print(f"✓ Extracted {len(session.fiducial_pairs)} pairs")
         
         # Calculate sample sizes
         total_synthetic = len(synthetic_samples)
@@ -869,6 +981,14 @@ N Fiducials: {len(session.fiducial_pairs)}"""
             total_range = max(r1[1], r2[1]) - min(r1[0], r2[0])
             overlaps.append(overlap / total_range)
         return overlaps
+
+    def generate_sessions(self, n, seed=None):
+        """Generate n synthetic correlation sessions."""
+        sessions = []
+        for i in range(n):
+            s = self.generate_correlation_session(seed=seed+i if seed is not None else None)
+            sessions.append(s)
+        return sessions
 
 
 # Usage example and testing

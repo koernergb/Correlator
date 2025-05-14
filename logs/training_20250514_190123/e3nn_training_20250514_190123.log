@@ -1,0 +1,2 @@
+2025-05-14 19:01:23,107 - INFO - Logging to logs/training_20250514_190123/e3nn_training_20250514_190123.log
+2025-05-14 19:01:23,128 - ERROR - Training failed: __init__() got an unexpected keyword argument 'lmax'

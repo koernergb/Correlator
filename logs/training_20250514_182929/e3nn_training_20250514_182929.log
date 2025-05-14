@@ -1,0 +1,2 @@
+2025-05-14 18:29:29 - INFO - Logging to logs/training_20250514_182929/e3nn_training_20250514_182929.log
+2025-05-14 18:29:29 - ERROR - Training failed: module 'e3nn.nn' has no attribute 'Sequential'

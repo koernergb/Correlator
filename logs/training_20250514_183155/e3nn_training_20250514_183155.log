@@ -1,0 +1,2 @@
+2025-05-14 18:31:55 - INFO - Logging to logs/training_20250514_183155/e3nn_training_20250514_183155.log
+2025-05-14 18:31:55 - ERROR - Training failed: module 'e3nn.nn' has no attribute 'Conv'

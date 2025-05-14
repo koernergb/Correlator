@@ -1,0 +1,2 @@
+2025-05-14 18:22:03 - INFO - Logging to logs/training_20250514_182203/e3nn_training_20250514_182203.log
+2025-05-14 18:22:03 - ERROR - Training failed: 'ThreeDCTSyntheticGenerator' object has no attribute 'generate_sessions'

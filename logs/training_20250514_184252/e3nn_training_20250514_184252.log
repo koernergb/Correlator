@@ -1,0 +1,2 @@
+2025-05-14 18:42:52,425 - INFO - Logging to logs/training_20250514_184252/e3nn_training_20250514_184252.log
+2025-05-14 18:42:52,774 - ERROR - Training failed: Incorrect last dimension for x

@@ -1,0 +1,2 @@
+2025-05-14 18:24:37 - INFO - Logging to logs/training_20250514_182437/e3nn_training_20250514_182437.log
+2025-05-14 18:24:37 - ERROR - Training failed: low >= high

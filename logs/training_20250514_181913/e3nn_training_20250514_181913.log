@@ -1,0 +1,2 @@
+2025-05-14 18:19:13 - INFO - Logging to logs/training_20250514_181913/e3nn_training_20250514_181913.log
+2025-05-14 18:19:13 - ERROR - Training failed: load_multiple_sessions() missing 1 required positional argument: 'data_dir'

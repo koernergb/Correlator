@@ -1,0 +1,19 @@
+2025-05-14 18:14:15 - INFO - Logging to logs/training_20250514_181415/e3nn_training_20250514_181415.log
+2025-05-14 18:14:15 - INFO - ==================================================
+2025-05-14 18:14:15 - INFO - Starting E3NN Correlator Training
+2025-05-14 18:14:15 - INFO - ==================================================
+2025-05-14 18:14:15 - INFO - Training parameters:
+2025-05-14 18:14:15 - INFO -   Data directory: data/2023_embo_clem_material/3DCT/data
+2025-05-14 18:14:15 - INFO -   Synthetic ratio: 0.7
+2025-05-14 18:14:15 - INFO -   Number of synthetic sessions: 10
+2025-05-14 18:14:15 - INFO -   Number of epochs: 100
+2025-05-14 18:14:15 - INFO -   Learning rate: 0.001
+2025-05-14 18:14:15 - INFO -   Device: cpu
+2025-05-14 18:14:15 - INFO -   Log file: logs/training_20250514_181415/e3nn_training_20250514_181415.log
+2025-05-14 18:14:15 - INFO - ==================================================
+2025-05-14 18:14:15 - ERROR - Training failed: randn() received an invalid combination of arguments - got (Irreps, Irreps), but expected one of:
+ * (tuple of ints size, *, torch.Generator generator, tuple of names names, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+ * (tuple of ints size, *, torch.Generator generator, Tensor out = None, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+ * (tuple of ints size, *, Tensor out = None, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+ * (tuple of ints size, *, tuple of names names, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+

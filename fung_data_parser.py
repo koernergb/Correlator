@@ -387,13 +387,64 @@ class ThreeDCTDataParser:
             return None
         return None
     
-    def extract_training_pairs(self, session: CorrelationSession) -> List[Tuple[np.ndarray, np.ndarray]]:
-        """Extract verified (3D fluorescence, 2D SEM) coordinate pairs for training
+    def convert_to_e3nn_format(self, transform: TransformationParams) -> np.ndarray:
+        """Convert transformation parameters to E3NN format
+        
+        Args:
+            transform: Transformation parameters from 3DCT
+            
+        Returns:
+            Array of parameters in E3NN format:
+            - First 9 elements: flattened rotation matrix
+            - Next 1 element: scale
+            - Next 3 elements: translation
+            - Last 3 elements: center point
+        """
+        # Convert Euler angles to rotation matrix
+        phi, psi, theta = np.radians(transform.rotation_euler)
+        
+        # Rotation matrices for each axis
+        R_x = np.array([
+            [1, 0, 0],
+            [0, np.cos(phi), -np.sin(phi)],
+            [0, np.sin(phi), np.cos(phi)]
+        ])
+        
+        R_y = np.array([
+            [np.cos(psi), 0, np.sin(psi)],
+            [0, 1, 0],
+            [-np.sin(psi), 0, np.cos(psi)]
+        ])
+        
+        R_z = np.array([
+            [np.cos(theta), -np.sin(theta), 0],
+            [np.sin(theta), np.cos(theta), 0],
+            [0, 0, 1]
+        ])
+        
+        # Combined rotation: R = R_z * R_y * R_x (same order as 3DCT)
+        R = R_z @ R_y @ R_x
+        
+        # Combine all parameters
+        params = np.concatenate([
+            R.flatten(),  # 9 parameters for rotation
+            [transform.scale],  # 1 parameter for scale
+            transform.translation_center,  # 3 parameters for translation
+            transform.center_point  # 3 parameters for center point
+        ])
+        
+        return params
+
+    def extract_training_pairs(self, session: CorrelationSession) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        """Extract verified (3D fluorescence, 2D SEM) coordinate pairs and transformation parameters for training
         
         Returns:
-            List of tuples: (3D_fluorescence_coords, 2D_SEM_coords)
+            List of tuples: (3D_fluorescence_coords, 2D_SEM_coords, transform_params)
         """
         training_pairs = []
+        
+        # Convert transformation parameters to E3NN format
+        transform_params = self.convert_to_e3nn_format(session.transformation)
         
         for fiducial in session.fiducial_pairs:
             # Ground truth input: 3D fluorescence coordinates (with Z!)
@@ -402,7 +453,7 @@ class ThreeDCTDataParser:
             # Ground truth output: 2D SEM coordinates (manually verified)
             sem_2d = fiducial.final_2d  # [x, y]
             
-            training_pairs.append((fluorescence_3d, sem_2d))
+            training_pairs.append((fluorescence_3d, sem_2d, transform_params))
         
         return training_pairs
     
@@ -465,12 +516,12 @@ class ThreeDCTDataParser:
         
         return T
     
-    def load_multiple_sessions(self, data_dir: str) -> List[CorrelationSession]:
+    def load_multiple_sessions(self) -> List[CorrelationSession]:
         """Load all correlation sessions from a directory"""
         print(f"\n=== Loading Multiple Sessions ===")
-        print(f"Data directory: {data_dir}")
+        print(f"Data directory: {self.base_path}")
         
-        data_path = Path(data_dir)
+        data_path = self.base_path
         sessions = []
         
         # Find all correlation txt files
@@ -600,12 +651,10 @@ if __name__ == "__main__":
         
         # Show first few examples
         print("\nFirst 3 training pairs:")
-        for i, (fluor_3d, sem_2d) in enumerate(training_pairs[:3]):
+        for i, (fluor_3d, sem_2d, _) in enumerate(training_pairs[:3]):
             print(f"  Pair {i+1}:")
             print(f"    3D Fluorescence: ({fluor_3d[0]:.1f}, {fluor_3d[1]:.1f}, {fluor_3d[2]:.1f})")
             print(f"    2D SEM:          ({sem_2d[0]:.1f}, {sem_2d[1]:.1f})")
-            error = session.fiducial_pairs[i].error
-            print(f"    Error:           ({error[0]:.2f}, {error[1]:.2f}) pixels")
         
         # Get training data with metadata
         print("\nExtracting training data with metadata...")
@@ -660,7 +709,7 @@ if __name__ == "__main__":
     # Test loading multiple sessions
     print(f"\n=== Testing Multiple Session Loading ===")
     try:
-        sessions = parser.load_multiple_sessions("data")
+        sessions = parser.load_multiple_sessions()
         print(f"Found {len(sessions)} valid correlation sessions")
         
         if len(sessions) > 1:

@@ -1,0 +1,2 @@
+2025-05-14 18:47:31,842 - INFO - Logging to logs/training_20250514_184731/e3nn_training_20250514_184731.log
+2025-05-14 18:47:32,242 - ERROR - Training failed: Weights must be provided when the TensorProduct does not have `internal_weights`

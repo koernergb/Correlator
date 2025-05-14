@@ -1,0 +1,2 @@
+2025-05-14 19:18:34,620 - INFO - Logging to logs/training_20250514_191834/e3nn_training_20250514_191834.log
+2025-05-14 19:18:35,721 - ERROR - Training failed: The size of tensor a (3) must match the size of tensor b (2) at non-singleton dimension 1

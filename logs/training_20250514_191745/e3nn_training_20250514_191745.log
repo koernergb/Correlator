@@ -1,0 +1,2 @@
+2025-05-14 19:17:45,694 - INFO - Logging to logs/training_20250514_191745/e3nn_training_20250514_191745.log
+2025-05-14 19:17:46,848 - ERROR - Training failed: __init__() got an unexpected keyword argument 'verbose'

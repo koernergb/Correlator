@@ -1,0 +1,2 @@
+2025-05-14 19:09:07,454 - INFO - Logging to logs/training_20250514_190907/e3nn_training_20250514_190907.log
+2025-05-14 19:09:07,799 - ERROR - Training failed: running_mean should contain 72 elements not 24

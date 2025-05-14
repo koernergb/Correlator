@@ -1,0 +1,2 @@
+2025-05-14 19:25:17,426 - INFO - Logging to logs/training_20250514_192517/e3nn_training_20250514_192517.log
+2025-05-14 19:26:11,577 - INFO - Model saved to models/e3nn_correlator_20250514_192517.pth

@@ -1,116 +1,249 @@
 #!/usr/bin/env python3
-import os
-import sys
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, random_split
+import numpy as np
 from pathlib import Path
 import logging
-import torch
 from datetime import datetime
+import sys
+import os
+from typing import Dict, List, Tuple, Optional
+import matplotlib.pyplot as plt
+import json
+import traceback
 
-# Import directly from root directory
+from e3nn_correlator_network import (
+    E3NNFiducialCorrelator,
+    train_e3nn_correlator,
+    TrainingConfig,
+    FiducialDataset
+)
 from fung_data_parser import ThreeDCTDataParser
 from synthetic_data_generator import ThreeDCTSyntheticGenerator
-from e3nn_correlator_network import train_e3nn_correlator, E3NNFiducialCorrelator
 
-def setup_directories():
-    """Create necessary directories if they don't exist"""
-    print("\n=== Setting up Project Directories ===")
-    dirs = [
-        "data/2023_embo_clem_material/3DCT/data",
-        "logs",
-        "models"
-    ]
-    for dir_path in dirs:
-        print(f"Creating directory: {dir_path}")
-        Path(dir_path).mkdir(parents=True, exist_ok=True)
-        print(f"✓ Directory created/verified: {dir_path}")
+def setup_logging(log_dir: str) -> None:
+    """Setup logging configuration"""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = f"{log_dir}/training_{timestamp}.log"
+    
+    # Create log directory if it doesn't exist
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+    
+    logging.info(f"Logging to {log_file}")
+
+def create_dataset(
+    data_dir: str,
+    synthetic_ratio: float = 0.7,
+    num_synthetic_sessions: int = 10
+) -> Tuple[FiducialDataset, Dict]:
+    """Create dataset with real and synthetic data"""
+    # Load real data
+    parser = ThreeDCTDataParser(data_dir)
+    real_sessions = parser.load_multiple_sessions()
+    logging.info(f"Loaded {len(real_sessions)} real sessions")
+    
+    # Generate synthetic data
+    generator = ThreeDCTSyntheticGenerator.from_real_data(data_dir)
+    synthetic_sessions = generator.generate_sessions(num_synthetic_sessions)
+    logging.info(f"Generated {len(synthetic_sessions)} synthetic sessions")
+    
+    # Combine sessions
+    all_sessions = real_sessions + synthetic_sessions
+    
+    # Create dataset
+    dataset = FiducialDataset(all_sessions)
+    logging.info(f"Created dataset with {len(dataset)} training pairs")
+    
+    # Get normalization statistics
+    stats = {
+        'mean_3d': dataset.mean_3d.tolist(),
+        'std_3d': dataset.std_3d.tolist(),
+        'mean_2d': dataset.mean_2d.tolist(),
+        'std_2d': dataset.std_2d.tolist()
+    }
+    
+    return dataset, stats
+
+def create_dataloaders(
+    dataset: FiducialDataset,
+    batch_size: int,
+    val_split: float = 0.2
+) -> Tuple[DataLoader, DataLoader]:
+    """Create training and validation dataloaders"""
+    # Split dataset
+    train_size = int((1 - val_split) * len(dataset))
+    val_size = len(dataset) - train_size
+    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+    
+    # Create dataloaders
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True
+    )
+    
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True
+    )
+    
+    logging.info(f"Created dataloaders:")
+    logging.info(f"  - Training set: {train_size} samples")
+    logging.info(f"  - Validation set: {val_size} samples")
+    
+    return train_loader, val_loader
+
+def plot_training_history(
+    loss_history: Dict[str, List[float]],
+    save_dir: str
+) -> None:
+    """Plot and save training history"""
+    # Create plots directory
+    plots_dir = Path(save_dir) / "plots"
+    plots_dir.mkdir(exist_ok=True)
+    
+    # Plot total loss
+    plt.figure(figsize=(10, 6))
+    plt.plot(loss_history['train_loss'], label='Train Loss')
+    plt.plot(loss_history['val_loss'], label='Validation Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training and Validation Loss')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(plots_dir / "total_loss.png")
+    plt.close()
+    
+    # Plot component losses
+    plt.figure(figsize=(15, 10))
+    
+    # Rotation loss
+    plt.subplot(3, 1, 1)
+    plt.plot(loss_history['train_rot_loss'], label='Train')
+    plt.plot(loss_history['val_rot_loss'], label='Validation')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Rotation Loss')
+    plt.legend()
+    plt.grid(True)
+    
+    # Scale loss
+    plt.subplot(3, 1, 2)
+    plt.plot(loss_history['train_scale_loss'], label='Train')
+    plt.plot(loss_history['val_scale_loss'], label='Validation')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Scale Loss')
+    plt.legend()
+    plt.grid(True)
+    
+    # Translation loss
+    plt.subplot(3, 1, 3)
+    plt.plot(loss_history['train_trans_loss'], label='Train')
+    plt.plot(loss_history['val_trans_loss'], label='Validation')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Translation Loss')
+    plt.legend()
+    plt.grid(True)
+    
+    plt.tight_layout()
+    plt.savefig(plots_dir / "component_losses.png")
+    plt.close()
+
+def save_training_config(
+    config: TrainingConfig,
+    dataset_stats: Dict,
+    save_dir: str
+) -> None:
+    """Save training configuration and dataset statistics"""
+    config_dict = {
+        'data_dir': config.data_dir,
+        'synthetic_ratio': config.synthetic_ratio,
+        'num_synthetic_sessions': config.num_synthetic_sessions,
+        'num_epochs': config.num_epochs,
+        'learning_rate': config.learning_rate,
+        'batch_size': config.batch_size,
+        'device': config.device,
+        'dataset_stats': dataset_stats
+    }
+    
+    with open(Path(save_dir) / "training_config.json", 'w') as f:
+        json.dump(config_dict, f, indent=4)
 
 def main():
-    print("\n=== Starting E3NN Correlator Training ===")
-    
-    # Setup directories
-    setup_directories()
-    
-    # Training parameters
-    data_dir = "data/2023_embo_clem_material/3DCT/data"
-    synthetic_ratio = 0.7  # 70% synthetic, 30% real data
-    n_synthetic_sessions = 10
-    num_epochs = 100
-    learning_rate = 1e-3
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    
-    print("\n=== Training Configuration ===")
-    print(f"Data directory: {data_dir}")
-    print(f"Synthetic ratio: {synthetic_ratio}")
-    print(f"Number of synthetic sessions: {n_synthetic_sessions}")
-    print(f"Number of epochs: {num_epochs}")
-    print(f"Learning rate: {learning_rate}")
-    print(f"Device: {device}")
-    
-    # Create timestamp for this run
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    print(f"\nRun timestamp: {timestamp}")
-    
-    # Setup logging
-    log_dir = f"logs/training_{timestamp}"
-    print(f"\nSetting up logging in: {log_dir}")
-    os.makedirs(log_dir, exist_ok=True)
-    print("✓ Log directory created")
-    
-    # Train the model
-    print("\n=== Starting Model Training ===")
+    """Main training function"""
     try:
-        print("\nInitializing training...")
-        model, loss_history = train_e3nn_correlator(
-            data_dir=data_dir,
-            synthetic_ratio=synthetic_ratio,
-            n_synthetic_sessions=n_synthetic_sessions,
-            num_epochs=num_epochs,
-            learning_rate=learning_rate,
-            device=device,
-            log_dir=log_dir
+        # Create output directory
+        output_dir = Path("output") / datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Setup logging
+        setup_logging(str(output_dir))
+        logging.info("Starting training")
+        
+        # Create training configuration
+        config = TrainingConfig(
+            data_dir="data",
+            synthetic_ratio=0.7,
+            num_synthetic_sessions=10,
+            num_epochs=100,
+            learning_rate=0.001,
+            batch_size=32,
+            device="cuda" if torch.cuda.is_available() else "cpu",
+            log_dir=str(output_dir)
         )
-        print("✓ Training completed successfully")
         
-        # Save the model
-        print("\n=== Saving Model ===")
-        model_path = f"models/e3nn_correlator_{timestamp}.pth"
-        print(f"Saving model to: {model_path}")
+        # Create dataset
+        dataset, dataset_stats = create_dataset(
+            config.data_dir,
+            config.synthetic_ratio,
+            config.num_synthetic_sessions
+        )
         
-        torch.save({
-            'model_state_dict': model.state_dict(),
-            'loss_history': loss_history,
-            'training_params': {
-                'synthetic_ratio': synthetic_ratio,
-                'n_synthetic_sessions': n_synthetic_sessions,
-                'num_epochs': num_epochs,
-                'learning_rate': learning_rate
-            }
-        }, model_path)
+        # Create dataloaders
+        train_loader, val_loader = create_dataloaders(
+            dataset,
+            config.batch_size
+        )
         
-        print("✓ Model saved successfully")
-        logging.info(f"Model saved to {model_path}")
+        # Train model
+        model, loss_history = train_e3nn_correlator(
+            config,
+            train_loader,
+            val_loader
+        )
         
-        # Print training summary
-        print("\n=== Training Summary ===")
-        print(f"Final loss: {loss_history[-1]:.6f}")
-        print(f"Best loss: {min(loss_history):.6f}")
-        print(f"Training log: {log_dir}")
-        print(f"Model saved: {model_path}")
+        # Plot training history
+        plot_training_history(loss_history, str(output_dir))
+        
+        # Save training configuration
+        save_training_config(config, dataset_stats, str(output_dir))
+        
+        logging.info("Training completed successfully")
         
     except Exception as e:
-        print(f"\n✗ Training failed with error: {str(e)}")
-        print("Stack trace:")
-        import traceback
-        traceback.print_exc()
-        logging.error(f"Training failed: {e}")
+        logging.error(f"Error in training: {str(e)}")
+        logging.error("Stack trace:")
+        logging.error(traceback.format_exc())
         raise
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        print(f"\n✗ Program failed with error: {str(e)}")
-        print("Stack trace:")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1) 
+    main() 

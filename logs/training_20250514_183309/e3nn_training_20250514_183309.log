@@ -1,0 +1,2 @@
+2025-05-14 18:33:09 - INFO - Logging to logs/training_20250514_183309/e3nn_training_20250514_183309.log
+2025-05-14 18:33:09 - ERROR - Training failed: module 'torch.nn' has no attribute 'FullyConnectedNet'

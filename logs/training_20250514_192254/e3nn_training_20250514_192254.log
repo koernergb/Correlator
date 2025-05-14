@@ -1,0 +1,2 @@
+2025-05-14 19:22:54,488 - INFO - Logging to logs/training_20250514_192254/e3nn_training_20250514_192254.log
+2025-05-14 19:23:35,698 - ERROR - Training failed: 'E3NNFiducialCorrelator' object has no attribute '_convert_to_e3nn_format'
