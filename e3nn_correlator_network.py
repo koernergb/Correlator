@@ -20,6 +20,7 @@ import os
 from dataclasses import dataclass
 from e3nn.util.jit import compile_mode
 import json
+from torch.utils.data import DataLoader
 
 # Import directly from root directory
 from fung_data_parser import ThreeDCTDataParser, CorrelationSession, TransformationParams
@@ -38,99 +39,91 @@ class TrainingConfig:
     log_dir: Optional[str] = None
 
 @compile_mode("script")
-class E3NNFiducialCorrelator(torch.nn.Module):
+class E3NNFiducialCorrelator(nn.Module):
     """E3NN-based network for learning 3D to 2D fiducial correlation"""
     
-    def __init__(self, dropout_rate: float = 0.3):
+    def __init__(self, dropout_rate=0.3):
         super().__init__()
         
-        # Initialize device
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Input representation: 3D coordinates (x,y,z) for each fiducial
+        self.input_irreps = o3.Irreps("3x0e")  # 3 scalar values (x,y,z)
+        self.input_dim = self.input_irreps.dim  # Should be 3
         
-        # Define irreducible representations for input and output
-        self.irreps_in = Irreps("1x1o")  # 3D coordinates as scalar
-        self.irreps_out = Irreps("1x1o")  # 2D coordinates as scalar
+        # Hidden layer representations
+        self.hidden_irreps = o3.Irreps("16x0e")  # Simplified to just scalar representations
+        self.hidden_dim = self.hidden_irreps.dim  # Should be 16
         
-        # Define hidden layer irreps with higher order spherical harmonics
-        self.irreps_hidden = Irreps("16x0e + 16x1o + 16x2e")  # More channels and higher order
+        # Output representations:
+        # - 2D coordinates (x,y) for each fiducial (scalar)
+        # - Transformation parameters (rotation matrix, scale, translation)
+        self.output_irreps = o3.Irreps("2x0e")  # 2 scalar values (x,y)
+        self.output_dim = self.output_irreps.dim  # Should be 2
         
-        # Input normalization layer
-        self.input_norm = torch.nn.BatchNorm1d(3)
+        self.transform_irreps = o3.Irreps("13x0e")  # 13 scalar values (9 rot + 1 scale + 3 trans)
+        self.transform_dim = self.transform_irreps.dim  # Should be 13
         
-        # E3NN layers with proper initialization
-        self.layers = torch.nn.ModuleList([
-            # First layer: 3D to hidden representation
-            e3nn_nn.FullyConnectedNet(
-                [self.irreps_in, self.irreps_hidden],
-                act=torch.nn.ReLU()
-            ),
+        # Network layers
+        self.layers = nn.ModuleList([
+            # First layer: 3D -> hidden
+            nn.Linear(self.input_dim, self.hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout_rate),
             
-            # Second layer: Process geometric features
-            e3nn_nn.FullyConnectedNet(
-                [self.irreps_hidden, self.irreps_hidden],
-                act=torch.nn.ReLU()
-            ),
+            # Second layer: hidden -> hidden
+            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout_rate),
             
-            # Third layer: Process geometric relationships
-            e3nn_nn.FullyConnectedNet(
-                [self.irreps_hidden, self.irreps_hidden],
-                act=torch.nn.ReLU()
-            ),
-            
-            # Final layer: Project to 2D
-            e3nn_nn.FullyConnectedNet(
-                [self.irreps_hidden, self.irreps_out],
-                act=None  # No activation for final layer
-            )
+            # Third layer: hidden -> output
+            nn.Linear(self.hidden_dim, self.output_dim)
         ])
         
-        # Add dropout layers
-        self.dropout = torch.nn.Dropout(p=dropout_rate)
+        # Transformation prediction layers
+        self.transform_layers = nn.ModuleList([
+            # First layer: 3D -> hidden
+            nn.Linear(self.input_dim, self.hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout_rate),
+            
+            # Second layer: hidden -> hidden
+            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout_rate),
+            
+            # Third layer: hidden -> transform params
+            nn.Linear(self.hidden_dim, self.transform_dim)
+        ])
         
-        # Initialize weights with better scaling
-        self.apply(self._init_weights)
+    def forward(self, x):
+        # Input shape: (batch_size, num_fiducials, 3)
+        batch_size = x.shape[0]
+        num_fiducials = x.shape[1]
         
-        # Move to device
-        self.to(self.device)
-    
-    def _init_weights(self, module):
-        """Initialize weights with better scaling for geometric relationships"""
-        if isinstance(module, (torch.nn.Linear, torch.nn.Conv1d)):
-            # Use Kaiming initialization with better scaling
-            torch.nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
-            if module.bias is not None:
-                torch.nn.init.constant_(module.bias, 0)
-    
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass with improved geometric processing"""
-        # Input normalization
-        x = self.input_norm(x)
+        # Reshape input for processing
+        x = x.reshape(-1, 3)  # (batch_size * num_fiducials, 3)
         
-        # Process through E3NN layers with dropout
-        for i, layer in enumerate(self.layers):
-            x = layer(x)
-            # Apply dropout after each layer except the last one
-            if i < len(self.layers) - 1:
-                x = self.dropout(x)
+        # Process through coordinate prediction layers
+        coord_features = x
+        for layer in self.layers:
+            coord_features = layer(coord_features)
         
-        # Extract 2D coordinates (first two components)
-        return x[:, :2]
+        # Process through transform prediction layers
+        transform_features = x
+        for layer in self.transform_layers:
+            transform_features = layer(transform_features)
+        
+        # Reshape back to batch format
+        coords_2d = coord_features.reshape(batch_size, num_fiducials, 2)
+        transform_params = transform_features.reshape(batch_size, num_fiducials, 13)
+        
+        return coords_2d, transform_params
     
     def predict_transform(self, x: torch.Tensor) -> torch.Tensor:
-        """Predict transformation parameters"""
-        # Get the full output from the network
         output = self.forward(x)
-        
-        # Extract transformation parameters
-        # First 9 elements: rotation matrix
-        rotation = output[:, :9].reshape(-1, 3, 3)
-        # Next element: scale
-        scale = output[:, 9:10]
-        # Next 3 elements: translation
-        translation = output[:, 10:13]
-        # Last 3 elements: center point
-        center = output[:, 13:16]
-        
+        rotation = output[:, :, :9].reshape(-1, 3, 3)
+        scale = output[:, :, 9:10]
+        translation = output[:, :, 10:13]
+        center = output[:, :, 13:16]
         return torch.cat([
             rotation.reshape(-1, 9),
             scale,
@@ -307,186 +300,133 @@ class FiducialDataset(torch.utils.data.Dataset):
         y_coords = torch.tensor(self._normalize_2d(pair[1]), dtype=torch.float32)  # Normalized 2D coordinates
         y_transform = torch.tensor(pair[2], dtype=torch.float32)  # Transformation parameters
         
-        return x, y_coords, y_transform
+        return {
+            'x_3d': x,
+            'y_2d': y_coords,
+            'transform_params': y_transform
+        }
 
 def train_e3nn_correlator(
     config: TrainingConfig,
-    train_loader: torch.utils.data.DataLoader,
-    val_loader: torch.utils.data.DataLoader,
-    model: Optional[E3NNFiducialCorrelator] = None
+    train_loader: DataLoader,
+    val_loader: DataLoader
 ) -> Tuple[E3NNFiducialCorrelator, Dict[str, List[float]]]:
-    """Train the E3NN correlator model with improved training loop"""
-    try:
-        # Initialize model if not provided
-        if model is None:
-            model = E3NNFiducialCorrelator(dropout_rate=0.3).to(config.device)
+    """Train the E3NN correlator network"""
+    # Initialize model
+    model = E3NNFiducialCorrelator(dropout_rate=0.3).to(config.device)
+    
+    # Initialize optimizer and scheduler
+    optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=5, min_lr=1e-6
+    )
+    
+    # Initialize loss history
+    loss_history = {
+        'train_loss': [],
+        'val_loss': [],
+        'train_rot_loss': [],
+        'val_rot_loss': [],
+        'train_scale_loss': [],
+        'val_scale_loss': [],
+        'train_trans_loss': [],
+        'val_trans_loss': []
+    }
+    
+    # Training loop
+    for epoch in range(config.num_epochs):
+        # Training phase
+        model.train()
+        train_losses = []
+        train_rot_losses = []
+        train_scale_losses = []
+        train_trans_losses = []
         
-        # Initialize optimizer with better learning rate
-        optimizer = torch.optim.AdamW(
-            model.parameters(),
-            lr=config.learning_rate,
-            weight_decay=0.01
-        )
-        
-        # Learning rate scheduler
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer,
-            mode='min',
-            factor=0.5,
-            patience=5,
-            verbose=True
-        )
-        
-        # Initialize loss history
-        loss_history = {
-            'train_loss': [],
-            'val_loss': [],
-            'train_rot_loss': [],
-            'train_scale_loss': [],
-            'train_trans_loss': [],
-            'val_rot_loss': [],
-            'val_scale_loss': [],
-            'val_trans_loss': []
-        }
-        
-        # Training loop
-        best_val_loss = float('inf')
-        patience = 10
-        patience_counter = 0
-        
-        for epoch in range(config.num_epochs):
-            # Training phase
-            model.train()
-            train_losses = []
-            train_rot_losses = []
-            train_scale_losses = []
-            train_trans_losses = []
+        for batch in train_loader:
+            # Get batch data
+            x_3d = batch['x_3d'].to(config.device)
+            y_2d = batch['y_2d'].to(config.device)
+            transform_params = batch['transform_params'].to(config.device)
             
-            for batch in train_loader:
-                optimizer.zero_grad()
-                
+            # Forward pass
+            optimizer.zero_grad()
+            pred_2d, pred_transform = model(x_3d)
+            
+            # Calculate losses
+            coord_loss = F.mse_loss(pred_2d, y_2d)
+            rot_loss = F.mse_loss(pred_transform[:, :9], transform_params[:, :9])
+            scale_loss = F.mse_loss(pred_transform[:, 9], transform_params[:, 9])
+            trans_loss = F.mse_loss(pred_transform[:, 10:], transform_params[:, 10:])
+            
+            total_loss = coord_loss + rot_loss + scale_loss + trans_loss
+            
+            # Backward pass
+            total_loss.backward()
+            optimizer.step()
+            
+            # Record losses
+            train_losses.append(total_loss.item())
+            train_rot_losses.append(rot_loss.item())
+            train_scale_losses.append(scale_loss.item())
+            train_trans_losses.append(trans_loss.item())
+        
+        # Validation phase
+        model.eval()
+        val_losses = []
+        val_rot_losses = []
+        val_scale_losses = []
+        val_trans_losses = []
+        
+        with torch.no_grad():
+            for batch in val_loader:
                 # Get batch data
                 x_3d = batch['x_3d'].to(config.device)
                 y_2d = batch['y_2d'].to(config.device)
                 transform_params = batch['transform_params'].to(config.device)
                 
                 # Forward pass
-                pred_2d = model(x_3d)
+                pred_2d, pred_transform = model(x_3d)
                 
                 # Calculate losses
                 coord_loss = F.mse_loss(pred_2d, y_2d)
+                rot_loss = F.mse_loss(pred_transform[:, :9], transform_params[:, :9])
+                scale_loss = F.mse_loss(pred_transform[:, 9], transform_params[:, 9])
+                trans_loss = F.mse_loss(pred_transform[:, 10:], transform_params[:, 10:])
                 
-                # Get predicted transformation parameters
-                pred_params = model.predict_transform(x_3d)
-                
-                # Calculate transformation losses
-                rot_loss = F.mse_loss(pred_params[:, :9], transform_params[:, :9])
-                scale_loss = F.mse_loss(pred_params[:, 9:10], transform_params[:, 9:10])
-                trans_loss = F.mse_loss(pred_params[:, 10:13], transform_params[:, 10:13])
-                
-                # Combined loss
-                loss = coord_loss + 0.1 * (rot_loss + scale_loss + trans_loss)
-                
-                # Backward pass
-                loss.backward()
-                
-                # Gradient clipping
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                
-                optimizer.step()
+                total_loss = coord_loss + rot_loss + scale_loss + trans_loss
                 
                 # Record losses
-                train_losses.append(loss.item())
-                train_rot_losses.append(rot_loss.item())
-                train_scale_losses.append(scale_loss.item())
-                train_trans_losses.append(trans_loss.item())
-            
-            # Validation phase
-            model.eval()
-            val_losses = []
-            val_rot_losses = []
-            val_scale_losses = []
-            val_trans_losses = []
-            
-            with torch.no_grad():
-                for batch in val_loader:
-                    # Get batch data
-                    x_3d = batch['x_3d'].to(config.device)
-                    y_2d = batch['y_2d'].to(config.device)
-                    transform_params = batch['transform_params'].to(config.device)
-                    
-                    # Forward pass
-                    pred_2d = model(x_3d)
-                    
-                    # Calculate losses
-                    coord_loss = F.mse_loss(pred_2d, y_2d)
-                    
-                    # Get predicted transformation parameters
-                    pred_params = model.predict_transform(x_3d)
-                    
-                    # Calculate transformation losses
-                    rot_loss = F.mse_loss(pred_params[:, :9], transform_params[:, :9])
-                    scale_loss = F.mse_loss(pred_params[:, 9:10], transform_params[:, 9:10])
-                    trans_loss = F.mse_loss(pred_params[:, 10:13], transform_params[:, 10:13])
-                    
-                    # Combined loss
-                    loss = coord_loss + 0.1 * (rot_loss + scale_loss + trans_loss)
-                    
-                    # Record losses
-                    val_losses.append(loss.item())
-                    val_rot_losses.append(rot_loss.item())
-                    val_scale_losses.append(scale_loss.item())
-                    val_trans_losses.append(trans_loss.item())
-            
-            # Calculate average losses
-            avg_train_loss = np.mean(train_losses)
-            avg_val_loss = np.mean(val_losses)
-            
-            # Update learning rate
-            scheduler.step(avg_val_loss)
-            
-            # Record losses
-            loss_history['train_loss'].append(avg_train_loss)
-            loss_history['val_loss'].append(avg_val_loss)
-            loss_history['train_rot_loss'].append(np.mean(train_rot_losses))
-            loss_history['train_scale_loss'].append(np.mean(train_scale_losses))
-            loss_history['train_trans_loss'].append(np.mean(train_trans_losses))
-            loss_history['val_rot_loss'].append(np.mean(val_rot_losses))
-            loss_history['val_scale_loss'].append(np.mean(val_scale_losses))
-            loss_history['val_trans_loss'].append(np.mean(val_trans_losses))
-            
-            # Print progress
-            print(f"Epoch {epoch+1}/{config.num_epochs}")
-            print(f"Train Loss: {avg_train_loss:.6f}")
-            print(f"Val Loss: {avg_val_loss:.6f}")
-            print(f"Train Rot Loss: {np.mean(train_rot_losses):.6f}")
-            print(f"Train Scale Loss: {np.mean(train_scale_losses):.6f}")
-            print(f"Train Trans Loss: {np.mean(train_trans_losses):.6f}")
-            print(f"Val Rot Loss: {np.mean(val_rot_losses):.6f}")
-            print(f"Val Scale Loss: {np.mean(val_scale_losses):.6f}")
-            print(f"Val Trans Loss: {np.mean(val_trans_losses):.6f}")
-            print("-" * 50)
-            
-            # Early stopping
-            if avg_val_loss < best_val_loss:
-                best_val_loss = avg_val_loss
-                patience_counter = 0
-                # Save best model
-                if config.log_dir:
-                    torch.save(model.state_dict(), Path(config.log_dir) / "best_model.pt")
-            else:
-                patience_counter += 1
-                if patience_counter >= patience:
-                    print(f"Early stopping triggered after {epoch+1} epochs")
-                    break
+                val_losses.append(total_loss.item())
+                val_rot_losses.append(rot_loss.item())
+                val_scale_losses.append(scale_loss.item())
+                val_trans_losses.append(trans_loss.item())
         
-        return model, loss_history
+        # Update learning rate
+        avg_val_loss = np.mean(val_losses)
+        scheduler.step(avg_val_loss)
+        
+        # Record epoch losses
+        loss_history['train_loss'].append(np.mean(train_losses))
+        loss_history['val_loss'].append(avg_val_loss)
+        loss_history['train_rot_loss'].append(np.mean(train_rot_losses))
+        loss_history['val_rot_loss'].append(np.mean(val_rot_losses))
+        loss_history['train_scale_loss'].append(np.mean(train_scale_losses))
+        loss_history['val_scale_loss'].append(np.mean(val_scale_losses))
+        loss_history['train_trans_loss'].append(np.mean(train_trans_losses))
+        loss_history['val_trans_loss'].append(np.mean(val_trans_losses))
+        
+        # Log progress
+        logging.info(f"Epoch {epoch+1}/{config.num_epochs}")
+        logging.info(f"Train Loss: {loss_history['train_loss'][-1]:.4f}")
+        logging.info(f"Val Loss: {loss_history['val_loss'][-1]:.4f}")
+        logging.info(f"Train Rot Loss: {loss_history['train_rot_loss'][-1]:.4f}")
+        logging.info(f"Val Rot Loss: {loss_history['val_rot_loss'][-1]:.4f}")
+        logging.info(f"Train Scale Loss: {loss_history['train_scale_loss'][-1]:.4f}")
+        logging.info(f"Val Scale Loss: {loss_history['val_scale_loss'][-1]:.4f}")
+        logging.info(f"Train Trans Loss: {loss_history['train_trans_loss'][-1]:.4f}")
+        logging.info(f"Val Trans Loss: {loss_history['val_trans_loss'][-1]:.4f}")
     
-    except Exception as e:
-        print(f"Error in training: {str(e)}")
-        print("Stack trace:")
-        traceback.print_exc()
-        raise
+    return model, loss_history
 
 if __name__ == "__main__":
     # Test the model

@@ -526,7 +526,7 @@ class ThreeDCTDataParser:
         
         # Find all correlation txt files
         print("\nSearching for correlation files...")
-        txt_files = list(data_path.glob("*correlation*.txt"))
+        txt_files = list(data_path.glob("*_correlation.txt"))  # Updated pattern to match your file naming
         print(f"Found {len(txt_files)} correlation TXT files")
         
         for txt_file in txt_files:

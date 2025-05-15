@@ -1,0 +1,14 @@
+2025-05-14 19:32:52,309 - INFO - Logging to output/20250514_193252/training_20250514_193252.log
+2025-05-14 19:32:52,309 - INFO - Starting training
+2025-05-14 19:32:52,309 - INFO - Loaded 0 real sessions
+2025-05-14 19:32:52,309 - ERROR - Error in training: No correlation sessions found in data
+2025-05-14 19:32:52,309 - ERROR - Stack trace:
+2025-05-14 19:32:52,310 - ERROR - Traceback (most recent call last):
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/run_training.py", line 215, in main
+    dataset, dataset_stats = create_dataset(
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/run_training.py", line 58, in create_dataset
+    generator = ThreeDCTSyntheticGenerator.from_real_data(data_dir)
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/synthetic_data_generator.py", line 369, in from_real_data
+    raise ValueError(f"No correlation sessions found in {data_dir}")
+ValueError: No correlation sessions found in data
+

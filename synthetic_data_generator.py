@@ -16,6 +16,9 @@ from fung_data_parser import (
     ThreeDCTDataParser
 )
 
+# If there are any imports from e3nn_correlator_network or similar, change to:
+# from better_correlator import SimpleE3NNCorrelator, FixedFiducialDataset
+
 @dataclass
 class SyntheticParams:
     """Parameters for synthetic 3DCT data generation, empirically derived from real data"""
@@ -457,12 +460,18 @@ class ThreeDCTSyntheticGenerator:
         print("\nGenerating 3D fluorescence positions...")
         fluorescence_3d = self._generate_realistic_3d_positions(n_fiducials)
         print(f"✓ Generated {len(fluorescence_3d)} 3D positions")
+        print(f"  3D X range: {fluorescence_3d[:,0].min():.2f} to {fluorescence_3d[:,0].max():.2f}")
+        print(f"  3D Y range: {fluorescence_3d[:,1].min():.2f} to {fluorescence_3d[:,1].max():.2f}")
+        print(f"  3D Z range: {fluorescence_3d[:,2].min():.2f} to {fluorescence_3d[:,2].max():.2f}")
         
         # Generate transformation parameters
         print("\nGenerating transformation parameters...")
         transform_params = self._generate_transformation_parameters()
         print(f"Rotation: {transform_params.rotation_euler}")
         print(f"Scale: {transform_params.scale:.3f}")
+        print(f"Translation center: {transform_params.translation_center}")
+        print(f"Translation origin: {transform_params.translation_origin}")
+        print(f"Center point: {transform_params.center_point}")
         
         # Apply transformation
         print("\nApplying 3D to 2D transformation...")
@@ -470,6 +479,11 @@ class ThreeDCTSyntheticGenerator:
             fluorescence_3d, transform_params
         )
         print(f"✓ Transformed to 2D coordinates")
+        print(f"  2D X range: {sem_2d[:,0].min():.2f} to {sem_2d[:,0].max():.2f}")
+        print(f"  2D Y range: {sem_2d[:,1].min():.2f} to {sem_2d[:,1].max():.2f}")
+        print(f"  Error mean: {np.mean(individual_errors, axis=0)}")
+        print(f"  Error std: {np.std(individual_errors, axis=0)}")
+        print(f"  Error RMS: {np.sqrt(np.mean(np.sum(individual_errors**2, axis=1))):.3f}")
         
         # Create fiducial pairs
         print("\nCreating fiducial pairs...")
@@ -498,6 +512,22 @@ class ThreeDCTSyntheticGenerator:
         # Create session
         session_id = f"synthetic_{seed}" if seed else f"synthetic_{self.rng.randint(10000)}"
         print(f"\nCreating session with ID: {session_id}")
+        
+        # Debug print: summary of this session
+        print(f"Session summary:")
+        print(f"  Num fiducials: {n_fiducials}")
+        print(f"  3D X range: {fluorescence_3d[:,0].min():.2f} to {fluorescence_3d[:,0].max():.2f}")
+        print(f"  3D Y range: {fluorescence_3d[:,1].min():.2f} to {fluorescence_3d[:,1].max():.2f}")
+        print(f"  3D Z range: {fluorescence_3d[:,2].min():.2f} to {fluorescence_3d[:,2].max():.2f}")
+        print(f"  2D X range: {sem_2d[:,0].min():.2f} to {sem_2d[:,0].max():.2f}")
+        print(f"  2D Y range: {sem_2d[:,1].min():.2f} to {sem_2d[:,1].max():.2f}")
+        print(f"  Error RMS: {rms_error:.3f}")
+        print(f"  Rotation: {transform_params.rotation_euler}")
+        print(f"  Scale: {transform_params.scale:.3f}")
+        print(f"  Translation center: {transform_params.translation_center}")
+        print(f"  Translation origin: {transform_params.translation_origin}")
+        print(f"  Center point: {transform_params.center_point}")
+        print(f"  Num POIs: {len(pois)}")
         
         return CorrelationSession(
             session_id=session_id,

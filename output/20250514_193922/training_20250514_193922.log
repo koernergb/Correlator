@@ -1,0 +1,17 @@
+2025-05-14 19:39:22,344 - INFO - Logging to output/20250514_193922/training_20250514_193922.log
+2025-05-14 19:39:22,345 - INFO - Starting training
+2025-05-14 19:39:22,348 - INFO - Loaded 1 real sessions
+2025-05-14 19:39:22,358 - INFO - Generated 10 synthetic sessions
+2025-05-14 19:39:22,358 - INFO - Created dataset with 246 training pairs
+2025-05-14 19:39:22,360 - INFO - Created dataloaders:
+2025-05-14 19:39:22,360 - INFO -   - Training set: 196 samples
+2025-05-14 19:39:22,360 - INFO -   - Validation set: 50 samples
+2025-05-14 19:39:44,083 - ERROR - Error in training: list indices must be integers or slices, not str
+2025-05-14 19:39:44,083 - ERROR - Stack trace:
+2025-05-14 19:39:44,084 - ERROR - Traceback (most recent call last):
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/run_training.py", line 228, in main
+    model, loss_history = train_e3nn_correlator(
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/e3nn_correlator_network.py", line 340, in train_e3nn_correlator
+    x_3d = batch['x_3d'].to(config.device)
+TypeError: list indices must be integers or slices, not str
+

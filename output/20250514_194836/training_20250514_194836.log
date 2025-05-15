@@ -1,0 +1,23 @@
+2025-05-14 19:48:36,205 - INFO - Logging to output/20250514_194836/training_20250514_194836.log
+2025-05-14 19:48:36,205 - INFO - Starting training
+2025-05-14 19:48:36,208 - INFO - Loaded 1 real sessions
+2025-05-14 19:48:36,962 - INFO - Generated 1000 synthetic sessions
+2025-05-14 19:48:37,002 - INFO - Created dataset with 21442 training pairs
+2025-05-14 19:48:37,005 - INFO - Created dataloaders:
+2025-05-14 19:48:37,005 - INFO -   - Training set: 17153 samples
+2025-05-14 19:48:37,005 - INFO -   - Validation set: 4289 samples
+2025-05-14 19:48:53,323 - ERROR - Error in training: shape '[32, 3, 2]' is invalid for input of size 64
+2025-05-14 19:48:53,325 - ERROR - Stack trace:
+2025-05-14 19:48:53,329 - ERROR - Traceback (most recent call last):
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/run_training.py", line 239, in main
+    model, loss_history = train_e3nn_correlator(
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/e3nn_correlator_network.py", line 369, in train_e3nn_correlator
+    pred_2d, pred_transform = model(x_3d)
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/env/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/env/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/e3nn_correlator_network.py", line 132, in forward
+    coords_2d = coord_features.reshape(batch_size, num_fiducials, 2)
+RuntimeError: shape '[32, 3, 2]' is invalid for input of size 64
+

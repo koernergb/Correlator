@@ -1,0 +1,33 @@
+2025-05-14 19:43:57,385 - INFO - Logging to output/20250514_194357/training_20250514_194357.log
+2025-05-14 19:43:57,385 - INFO - Starting training
+2025-05-14 19:43:57,389 - INFO - Loaded 1 real sessions
+2025-05-14 19:43:58,103 - INFO - Generated 1000 synthetic sessions
+2025-05-14 19:43:58,142 - INFO - Created dataset with 21570 training pairs
+2025-05-14 19:43:58,145 - INFO - Created dataloaders:
+2025-05-14 19:43:58,145 - INFO -   - Training set: 17256 samples
+2025-05-14 19:43:58,145 - INFO -   - Validation set: 4314 samples
+2025-05-14 19:43:58,161 - ERROR - Error in training: randn() received an invalid combination of arguments - got (Irreps, Irreps), but expected one of:
+ * (tuple of ints size, *, torch.Generator generator, tuple of names names, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+ * (tuple of ints size, *, torch.Generator generator, Tensor out = None, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+ * (tuple of ints size, *, Tensor out = None, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+ * (tuple of ints size, *, tuple of names names, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+
+2025-05-14 19:43:58,161 - ERROR - Stack trace:
+2025-05-14 19:43:58,162 - ERROR - Traceback (most recent call last):
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/run_training.py", line 239, in main
+    model, loss_history = train_e3nn_correlator(
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/e3nn_correlator_network.py", line 335, in train_e3nn_correlator
+    model = E3NNFiducialCorrelator(dropout_rate=0.3).to(config.device)
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/e3nn_correlator_network.py", line 64, in __init__
+    e3nn.nn.FullyConnectedNet(
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/env/lib/python3.9/site-packages/e3nn/nn/_fc.py", line 84, in __init__
+    layer = _Layer(h1, h2, a, var_in, var_out)
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/env/lib/python3.9/site-packages/e3nn/nn/_fc.py", line 19, in __init__
+    self.weight = torch.nn.Parameter(torch.randn(h_in, h_out))
+TypeError: randn() received an invalid combination of arguments - got (Irreps, Irreps), but expected one of:
+ * (tuple of ints size, *, torch.Generator generator, tuple of names names, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+ * (tuple of ints size, *, torch.Generator generator, Tensor out = None, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+ * (tuple of ints size, *, Tensor out = None, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+ * (tuple of ints size, *, tuple of names names, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+
+

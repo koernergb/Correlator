@@ -13,12 +13,12 @@ from typing import Dict, List, Tuple, Optional
 import matplotlib.pyplot as plt
 import json
 import traceback
+import argparse
 
-from e3nn_correlator_network import (
-    E3NNFiducialCorrelator,
-    train_e3nn_correlator,
-    TrainingConfig,
-    FiducialDataset
+from better_correlator import (
+    SimpleE3NNCorrelator,
+    train_simple_e3nn,
+    FixedFiducialDataset
 )
 from fung_data_parser import ThreeDCTDataParser
 from synthetic_data_generator import ThreeDCTSyntheticGenerator
@@ -43,154 +43,21 @@ def setup_logging(log_dir: str) -> None:
     
     logging.info(f"Logging to {log_file}")
 
-def create_dataset(
-    data_dir: str,
-    synthetic_ratio: float = 0.7,
-    num_synthetic_sessions: int = 10
-) -> Tuple[FiducialDataset, Dict]:
-    """Create dataset with real and synthetic data"""
-    # Load real data
-    parser = ThreeDCTDataParser(data_dir)
-    real_sessions = parser.load_multiple_sessions()
-    logging.info(f"Loaded {len(real_sessions)} real sessions")
-    
-    # Generate synthetic data
-    generator = ThreeDCTSyntheticGenerator.from_real_data(data_dir)
-    synthetic_sessions = generator.generate_sessions(num_synthetic_sessions)
-    logging.info(f"Generated {len(synthetic_sessions)} synthetic sessions")
-    
-    # Combine sessions
-    all_sessions = real_sessions + synthetic_sessions
-    
-    # Create dataset
-    dataset = FiducialDataset(all_sessions)
-    logging.info(f"Created dataset with {len(dataset)} training pairs")
-    
-    # Get normalization statistics
-    stats = {
-        'mean_3d': dataset.mean_3d.tolist(),
-        'std_3d': dataset.std_3d.tolist(),
-        'mean_2d': dataset.mean_2d.tolist(),
-        'std_2d': dataset.std_2d.tolist()
-    }
-    
-    return dataset, stats
-
-def create_dataloaders(
-    dataset: FiducialDataset,
-    batch_size: int,
-    val_split: float = 0.2
-) -> Tuple[DataLoader, DataLoader]:
-    """Create training and validation dataloaders"""
-    # Split dataset
-    train_size = int((1 - val_split) * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
-    
-    # Create dataloaders
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=4,
-        pin_memory=True
-    )
-    
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=4,
-        pin_memory=True
-    )
-    
-    logging.info(f"Created dataloaders:")
-    logging.info(f"  - Training set: {train_size} samples")
-    logging.info(f"  - Validation set: {val_size} samples")
-    
-    return train_loader, val_loader
-
-def plot_training_history(
-    loss_history: Dict[str, List[float]],
-    save_dir: str
-) -> None:
-    """Plot and save training history"""
-    # Create plots directory
-    plots_dir = Path(save_dir) / "plots"
-    plots_dir.mkdir(exist_ok=True)
-    
-    # Plot total loss
-    plt.figure(figsize=(10, 6))
-    plt.plot(loss_history['train_loss'], label='Train Loss')
-    plt.plot(loss_history['val_loss'], label='Validation Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.title('Training and Validation Loss')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(plots_dir / "total_loss.png")
-    plt.close()
-    
-    # Plot component losses
-    plt.figure(figsize=(15, 10))
-    
-    # Rotation loss
-    plt.subplot(3, 1, 1)
-    plt.plot(loss_history['train_rot_loss'], label='Train')
-    plt.plot(loss_history['val_rot_loss'], label='Validation')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.title('Rotation Loss')
-    plt.legend()
-    plt.grid(True)
-    
-    # Scale loss
-    plt.subplot(3, 1, 2)
-    plt.plot(loss_history['train_scale_loss'], label='Train')
-    plt.plot(loss_history['val_scale_loss'], label='Validation')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.title('Scale Loss')
-    plt.legend()
-    plt.grid(True)
-    
-    # Translation loss
-    plt.subplot(3, 1, 3)
-    plt.plot(loss_history['train_trans_loss'], label='Train')
-    plt.plot(loss_history['val_trans_loss'], label='Validation')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.title('Translation Loss')
-    plt.legend()
-    plt.grid(True)
-    
-    plt.tight_layout()
-    plt.savefig(plots_dir / "component_losses.png")
-    plt.close()
-
-def save_training_config(
-    config: TrainingConfig,
-    dataset_stats: Dict,
-    save_dir: str
-) -> None:
-    """Save training configuration and dataset statistics"""
-    config_dict = {
-        'data_dir': config.data_dir,
-        'synthetic_ratio': config.synthetic_ratio,
-        'num_synthetic_sessions': config.num_synthetic_sessions,
-        'num_epochs': config.num_epochs,
-        'learning_rate': config.learning_rate,
-        'batch_size': config.batch_size,
-        'device': config.device,
-        'dataset_stats': dataset_stats
-    }
-    
-    with open(Path(save_dir) / "training_config.json", 'w') as f:
-        json.dump(config_dict, f, indent=4)
-
 def main():
     """Main training function"""
     try:
+        # Parse command line arguments
+        parser = argparse.ArgumentParser(description='Train E3NN correlator network')
+        parser.add_argument('--num_epochs', type=int, default=100,
+                          help='Number of training epochs')
+        parser.add_argument('--learning_rate', type=float, default=0.001,
+                          help='Learning rate')
+        parser.add_argument('--batch_size', type=int, default=32,
+                          help='Batch size')
+        parser.add_argument('--device', type=str, default="cuda" if torch.cuda.is_available() else "cpu",
+                          help='Device to use (cuda/cpu/mps)')
+        args = parser.parse_args()
+
         # Create output directory
         output_dir = Path("output") / datetime.now().strftime("%Y%m%d_%H%M%S")
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -199,43 +66,54 @@ def main():
         setup_logging(str(output_dir))
         logging.info("Starting training")
         
-        # Create training configuration
-        config = TrainingConfig(
-            data_dir="data",
-            synthetic_ratio=0.7,
-            num_synthetic_sessions=10,
-            num_epochs=100,
-            learning_rate=0.001,
-            batch_size=32,
-            device="cuda" if torch.cuda.is_available() else "cpu",
-            log_dir=str(output_dir)
-        )
-        
+        # Load real data
+        parser = ThreeDCTDataParser("data/2023_embo_clem_material/3DCT/data")
+        real_sessions = parser.load_multiple_sessions()
+
+        # Generate synthetic data
+        generator = ThreeDCTSyntheticGenerator.from_real_data("data/2023_embo_clem_material/3DCT/data")
+        num_synthetic_sessions = 1000  # or any number you want
+        synthetic_sessions = generator.generate_sessions(num_synthetic_sessions)
+
+        # Combine sessions
+        all_sessions = real_sessions + synthetic_sessions
+
         # Create dataset
-        dataset, dataset_stats = create_dataset(
-            config.data_dir,
-            config.synthetic_ratio,
-            config.num_synthetic_sessions
-        )
-        
-        # Create dataloaders
-        train_loader, val_loader = create_dataloaders(
-            dataset,
-            config.batch_size
-        )
+        dataset = FixedFiducialDataset(all_sessions)
         
         # Train model
-        model, loss_history = train_e3nn_correlator(
-            config,
-            train_loader,
-            val_loader
+        model, loss_history = train_simple_e3nn(
+            data_dir="data/2023_embo_clem_material/3DCT/data",
+            num_epochs=args.num_epochs,
+            learning_rate=args.learning_rate,
+            batch_size=args.batch_size,
+            device=args.device
         )
         
         # Plot training history
-        plot_training_history(loss_history, str(output_dir))
+        plt.figure(figsize=(10, 6))
+        plt.plot(loss_history['train_loss'], label='Train Loss')
+        plt.plot(loss_history['val_loss'], label='Val Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.legend()
+        plt.yscale('log')
+        plt.title('Training Progress')
+        plt.savefig(output_dir / "training_history.png")
         
-        # Save training configuration
-        save_training_config(config, dataset_stats, str(output_dir))
+        # Save model
+        torch.save(model.state_dict(), output_dir / "model.pth")
+        logging.info("Model saved successfully")
+        
+        # Save training config
+        config = {
+            'num_epochs': args.num_epochs,
+            'learning_rate': args.learning_rate,
+            'batch_size': args.batch_size,
+            'device': args.device
+        }
+        with open(output_dir / "training_config.json", 'w') as f:
+            json.dump(config, f, indent=4)
         
         logging.info("Training completed successfully")
         

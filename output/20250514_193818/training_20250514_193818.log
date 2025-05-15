@@ -1,0 +1,17 @@
+2025-05-14 19:38:18,623 - INFO - Logging to output/20250514_193818/training_20250514_193818.log
+2025-05-14 19:38:18,624 - INFO - Starting training
+2025-05-14 19:38:18,633 - INFO - Loaded 1 real sessions
+2025-05-14 19:38:18,645 - INFO - Generated 10 synthetic sessions
+2025-05-14 19:38:18,645 - INFO - Created dataset with 248 training pairs
+2025-05-14 19:38:18,647 - INFO - Created dataloaders:
+2025-05-14 19:38:18,647 - INFO -   - Training set: 198 samples
+2025-05-14 19:38:18,647 - INFO -   - Validation set: 50 samples
+2025-05-14 19:38:18,722 - ERROR - Error in training: __init__() got an unexpected keyword argument 'verbose'
+2025-05-14 19:38:18,722 - ERROR - Stack trace:
+2025-05-14 19:38:18,722 - ERROR - Traceback (most recent call last):
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/run_training.py", line 228, in main
+    model, loss_history = train_e3nn_correlator(
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/e3nn_correlator_network.py", line 304, in train_e3nn_correlator
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+TypeError: __init__() got an unexpected keyword argument 'verbose'
+

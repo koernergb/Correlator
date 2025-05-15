@@ -1,0 +1,35 @@
+2025-05-14 19:42:07,104 - INFO - Logging to output/20250514_194207/training_20250514_194207.log
+2025-05-14 19:42:07,104 - INFO - Starting training
+2025-05-14 19:42:07,108 - INFO - Loaded 1 real sessions
+2025-05-14 19:42:07,813 - INFO - Generated 1000 synthetic sessions
+2025-05-14 19:42:07,852 - INFO - Created dataset with 21625 training pairs
+2025-05-14 19:42:07,856 - INFO - Created dataloaders:
+2025-05-14 19:42:07,856 - INFO -   - Training set: 17300 samples
+2025-05-14 19:42:07,856 - INFO -   - Validation set: 4325 samples
+2025-05-14 19:42:23,823 - ERROR - Error in training: mat1 and mat2 shapes cannot be multiplied (96x1 and 3x144)
+2025-05-14 19:42:23,823 - ERROR - Stack trace:
+2025-05-14 19:42:23,828 - ERROR - Traceback (most recent call last):
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/run_training.py", line 239, in main
+    model, loss_history = train_e3nn_correlator(
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/e3nn_correlator_network.py", line 333, in train_e3nn_correlator
+    pred_2d, pred_transform = model(x_3d)
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/env/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/env/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/e3nn_correlator_network.py", line 94, in forward
+    x = layer(x)
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/env/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/env/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/env/lib/python3.9/site-packages/torch/nn/modules/container.py", line 240, in forward
+    input = module(input)
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/env/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/env/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/Users/koerner/Projects/mosafungalaganti/correlator/env/lib/python3.9/site-packages/e3nn/nn/_fc.py", line 47, in forward
+    x = x @ w
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (96x1 and 3x144)
+
